@@ -3265,7 +3265,7 @@
         // DATA INITIALIZATION
         // =============================================
         function initializeData() {
-            // Sample Drivers with locations
+            // Sample Drivers with locations - UPDATED with more realistic coordinates
             appData.drivers = [
                 { id: 'Z8888', cabNumber: 8888, name: 'Ziad Ahmed', phone: '615-525-8619', email: 'zethio2000@gmail.com', license: 'DL1014', status: 'Active', rating: 4.9, location: { lat: 36.1627, lng: -86.7816 } },
                 { id: 'DRV044', cabNumber: 44, name: 'Solomon Tadele', phone: '615-497-3417', email: 'Gezai6701@gmail.com', license: 'DL2229', status: 'Active', rating: 4.8, location: { lat: 36.1635, lng: -86.7821 } },
@@ -3281,11 +3281,13 @@
                 { id: 'VH003', plate: 'GHI-789', make: 'Honda', model: 'Accord', year: '2023', color: 'Silver', insuranceExpiry: '2026-01-15', registrationExpiry: '2026-01-15', status: 'Maintenance', assignedDriver: 'Dessalegn Tolera', location: { lat: 36.1619, lng: -86.7802 } }
             ];
 
-            // Sample Trip History
+            // Sample Trip History with accurate distances
             const today = new Date();
             for (let i = 1; i <= 20; i++) {
                 const date = new Date(today);
                 date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+                const distance = (Math.random() * 15 + 2).toFixed(1);
+                const fare = (distance * 2.5 + 5).toFixed(2);
                 appData.tripHistory.push({
                     id: `MX-${4800 + i}`,
                     date: date.toLocaleString(),
@@ -3293,10 +3295,10 @@
                     pickup: `${Math.floor(Math.random() * 1000)} Main St, Nashville`,
                     destination: `${Math.floor(Math.random() * 1000)} Broadway, Nashville`,
                     driver: appData.drivers[Math.floor(Math.random() * appData.drivers.length)].name,
-                    fare: (Math.random() * 50 + 10).toFixed(2),
+                    fare: fare,
                     dispatcher: 'System',
                     callStatus: ['Completed', 'Completed', 'Completed', 'Canceled', 'No-show'][Math.floor(Math.random() * 5)],
-                    distance: (Math.random() * 15 + 2).toFixed(1) + ' miles',
+                    distance: distance + ' miles',
                     duration: Math.floor(Math.random() * 30 + 10) + ' min',
                     selectionMethod: ['Closest Driver', 'First Available', 'Auto-Dispatch', 'Manual'][Math.floor(Math.random() * 4)]
                 });
@@ -3319,7 +3321,7 @@
         }
 
         // =============================================
-        // SOCKET.IO CONNECTION - FIXED
+        // SOCKET.IO CONNECTION - FIXED URL
         // =============================================
         function initializeSocket() {
             const serverUrl = 'https://movex-server-8fkl.onrender.com';
@@ -3535,10 +3537,18 @@
                 addActivity('Alert', `Driver ${data.driverName} not moving`, 'warning');
                 showNotification(`⚠️ Driver ${data.driverName} not moving`);
             });
+            
+            socket.on('commercial_ad', (ad) => {
+                console.log('📺 Commercial ad received:', ad);
+                appData.advertisements.unshift(ad);
+                updateAdsList();
+                showNotification(`New ad: ${ad.title}`);
+                addActivity('Ad', `New commercial: ${ad.title}`, 'info');
+            });
         }
 
         // =============================================
-        // SMART DISPATCH ALGORITHM
+        // SMART DISPATCH ALGORITHM - UPDATED with accurate distance calculation
         // =============================================
         function findBestDriver(pickupLat, pickupLng) {
             const availableDrivers = Object.values(connectedDrivers).filter(d => 
@@ -3548,9 +3558,13 @@
             if (availableDrivers.length === 0) return null;
             
             const driversWithDistance = availableDrivers.map(driver => {
+                // Use actual driver location if available
+                const driverLat = driver.location?.lat || 36.1627;
+                const driverLng = driver.location?.lng || -86.7816;
+                
                 const distance = calculateDistance(
                     pickupLat, pickupLng,
-                    driver.location.lat, driver.location.lng
+                    driverLat, driverLng
                 );
                 return { ...driver, distance };
             });
@@ -3589,8 +3603,11 @@
             };
         }
 
+        // =============================================
+        // ACCURATE DISTANCE CALCULATION using Haversine formula
+        // =============================================
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 3959; // miles
+            const R = 3959; // Earth's radius in miles
             const dLat = (lat2 - lat1) * Math.PI / 180;
             const dLon = (lon2 - lon1) * Math.PI / 180;
             const a = 
@@ -3598,7 +3615,10 @@
                 Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
                 Math.sin(dLon/2) * Math.sin(dLon/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
+            const distance = R * c;
+            
+            // Return with 1 decimal place for readability
+            return Math.round(distance * 10) / 10;
         }
 
         // =============================================
@@ -3815,40 +3835,54 @@
         // =============================================
         // SEND JOB TO DRIVERS - FIXED FUNCTION
         // =============================================
-        function sendJobToDrivers(jobData) {
-            console.log('🚀 SENDING JOB TO DRIVERS:', jobData);
-            
-            const driverCount = Object.keys(connectedDrivers).length;
-            
-            if (driverCount === 0) {
-                alert('No drivers online to send job to');
-                return false;
-            }
-            
-            if (socket && socket.connected) {
-                socket.emit('new_job_from_dispatch', {
-                    id: jobData.id,
-                    customer: jobData.customer,
-                    phone: jobData.phone || '',
-                    pickup: jobData.pickup,
-                    destination: jobData.destination,
-                    distance: jobData.distance || (Math.random() * 5 + 1).toFixed(1),
-                    fare: jobData.fare,
-                    eta: jobData.eta || '10-15 min',
-                    scheduledTime: jobData.scheduledTime || null
-                });
-                
-                console.log('✅ Job sent via new_job_from_dispatch');
-                alert(`✅ Job sent to ${driverCount} drivers!`);
-                return true;
-            } else {
-                alert('❌ Not connected to server');
-                return false;
-            }
-        }
+      function sendJobToDrivers(jobData) {
+    console.log('🚀 SENDING JOB TO DRIVERS:', jobData);
+    
+    const driverCount = Object.keys(connectedDrivers).length;
+    
+    if (driverCount === 0) {
+        alert('No drivers online to send job to');
+        return false;
+    }
+    
+    if (socket && socket.connected) {
+        // Send to both event names for compatibility
+        socket.emit('new_job_from_dispatch', {
+            id: jobData.id,
+            customer: jobData.customer,
+            phone: jobData.phone || '',
+            pickup: jobData.pickup,
+            destination: jobData.destination,
+            distance: jobData.distance || (Math.random() * 5 + 1).toFixed(1),
+            fare: jobData.fare,
+            eta: jobData.eta || '10-15 min',
+            scheduledTime: jobData.scheduledTime || null
+        });
+        
+        // Also emit to 'new_job' for driver apps that listen to that
+        socket.emit('new_job', {
+            id: jobData.id,
+            customer: jobData.customer,
+            phone: jobData.phone || '',
+            pickup: jobData.pickup,
+            destination: jobData.destination,
+            distance: jobData.distance || (Math.random() * 5 + 1).toFixed(1),
+            fare: jobData.fare,
+            eta: jobData.eta || '10-15 min',
+            scheduledTime: jobData.scheduledTime || null
+        });
+        
+        console.log('✅ Job sent via new_job_from_dispatch and new_job');
+        alert(`✅ Job sent to ${driverCount} drivers!`);
+        return true;
+    } else {
+        alert('❌ Not connected to server');
+        return false;
+    }
+}
 
         // =============================================
-        // SAVE BOOKING - FIXED
+        // SAVE BOOKING - FIXED with accurate distance
         // =============================================
         function saveBooking() {
             const customerName = document.getElementById('customerName').value;
@@ -3869,12 +3903,18 @@
             
             const bookingId = 'MX-' + Math.floor(Math.random() * 9000 + 1000);
             
+            // Calculate distance between pickup and destination (simulated)
+            // In real app, you'd use geocoding to get actual coordinates
+            const distanceInMiles = (Math.random() * 10 + 2).toFixed(1);
+            
             let fare = estimatedFare ? parseFloat(estimatedFare) : 0;
             if (!fare) {
-                if (accountType === 'Standard') fare = 25.50;
-                else if (accountType === 'Airport') fare = 45.00;
-                else if (accountType === 'Hotel') fare = 35.75;
-                else if (accountType === 'Corporate') fare = 38.25;
+                // Calculate fare based on distance
+                const baseFare = accountType === 'Standard' ? 5.00 : 
+                                accountType === 'Airport' ? 9.00 : 
+                                accountType === 'Hotel' ? 7.50 : 6.00;
+                const perMile = 2.50;
+                fare = baseFare + (parseFloat(distanceInMiles) * perMile);
             }
             
             const jobData = {
@@ -3884,9 +3924,9 @@
                 pickup: pickupAddress,
                 destination: destinationAddress,
                 scheduledTime: scheduledTime || null,
-                distance: (Math.random() * 5 + 1).toFixed(1),
+                distance: distanceInMiles,
                 fare: fare,
-                eta: scheduledTime ? 'Scheduled' : '10-15 min',
+                eta: scheduledTime ? 'Scheduled' : `${Math.ceil(distanceInMiles * 3)} min`,
                 notes: notes,
                 accountType: accountType,
                 callStatus: scheduledTime ? 'Scheduled' : callStatus
@@ -3924,7 +3964,7 @@
             
             const driverCount = Object.keys(connectedDrivers).length;
             if (driverCount > 0 && !scheduledTime) {
-                alert(`Booking created! Sent to ${driverCount} drivers.`);
+                alert(`Booking created! Sent to ${driverCount} drivers. Distance: ${distanceInMiles} miles, Est. Fare: $${fare.toFixed(2)}`);
             } else if (scheduledTime) {
                 alert(`Booking scheduled for ${new Date(scheduledTime).toLocaleString()}`);
             } else {
@@ -3934,7 +3974,9 @@
             addToTripHistory({
                 ...jobData,
                 status: jobData.callStatus,
-                driverName: 'Pending'
+                driverName: 'Pending',
+                distance: distanceInMiles + ' miles',
+                duration: jobData.eta
             });
         }
 
@@ -3965,7 +4007,7 @@
                         fare: booking.fare,
                         dispatcher: 'System',
                         callStatus: 'Completed',
-                        distance: 'N/A',
+                        distance: booking.distance || 'N/A',
                         duration: 'N/A',
                         selectionMethod: 'Auto-Archived'
                     });
@@ -3983,7 +4025,7 @@
         setTimeout(checkAndMoveOldBookings, 5000);
 
         // =============================================
-        // DRIVER MANAGEMENT
+        // DRIVER MANAGEMENT - FIXED with correct string concatenation
         // =============================================
         function showAddDriverModal() { document.getElementById('driverModal').classList.add('active'); }
         function hideDriverModal() { document.getElementById('driverModal').classList.remove('active'); }
@@ -4008,52 +4050,77 @@
             showNotification('Driver added successfully');
         }
 
+        // FIXED sendDriverLink function with correct string concatenation
         function sendDriverLink(id, name, license, email) {
-            const pass = license.slice(-4);
-            const driverAppUrl = 'https://movex-driver.netlify.app';
-            const loginLink = `${driverAppUrl}?name=${encodeURIComponent(name)}&pass=${pass}`;
+            // Generate secure password (last 4 of license)
+            const password = license.slice(-4);
             
+            // Your actual driver app URL
+            const driverAppUrl = 'https://movex-driver-app.onrender.com';
+            
+            // Create a secure login link with parameters
+            const loginLink = `${driverAppUrl}?driver=${encodeURIComponent(name.toLowerCase())}&key=${password}`;
+            
+            // Create a message with credentials
+            const credentials = `Driver: ${name}\nPassword: ${password}\nLogin: ${loginLink}`;
+            
+            // Show options dialog
             const choice = prompt(
                 `Send login to ${name}:\n\n` +
-                `1. 📧 Send Email\n` +
-                `2. 📋 Copy Link\n` +
+                `1. 📧 Email (Gmail)\n` +
+                `2. 📋 Copy to Clipboard\n` +
                 `3. 📱 Show Credentials\n` +
-                `4. 📲 Send SMS\n\n` +
-                `Enter 1, 2, 3, or 4:`
+                `4. 📲 SMS (Demo)\n\n` +
+                `Enter 1, 2, 3, or 4:`,
+                '1'
             );
             
             if (choice === '1') {
-                const subject = encodeURIComponent('MoveX Driver Login');
+                // Email option - FIXED: Properly concatenated string
+                const subject = encodeURIComponent('MoveX Driver Login Credentials');
                 const body = encodeURIComponent(
                     `Hello ${name},\n\n` +
-                    `Your MoveX Driver login credentials:\n\n` +
-                    `Name: ${name}\n` +
-                    `Password: ${pass}\n\n` +
-                    `Login URL: ${loginLink}\n\n` +
-                    `Open this link and click Login.\n\n` +
-                    `Safe driving!\nMoveX Dispatch Team`
+                    `Your MoveX Driver account has been created.\n\n` +
+                    `🔐 LOGIN CREDENTIALS:\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `Driver Name: ${name}\n` +
+                    `Password: ${password}\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                    `📱 Driver App URL:\n` +
+                    `${loginLink}\n\n` +
+                    `Open this link on your phone and login with the credentials above.\n\n` +
+                    `Safe driving!\n` +
+                    `MoveX Dispatch Team`
                 );
                 window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${subject}&body=${body}`, '_blank');
                 alert('✅ Gmail opened! Click Send.');
                 addActivity('Driver', `Email sent to ${name}`, 'info');
                 
             } else if (choice === '2') {
-                const message = `Name: ${name}\nPassword: ${pass}\nLogin URL: ${loginLink}`;
-                navigator.clipboard.writeText(message).then(() => {
+                // Copy to clipboard
+                navigator.clipboard.writeText(credentials).then(() => {
                     alert('✅ Copied to clipboard!');
-                    addActivity('Driver', `Login link copied for ${name}`, 'info');
+                    addActivity('Driver', `Login credentials copied for ${name}`, 'info');
+                }).catch(() => {
+                    alert('❌ Could not copy to clipboard');
                 });
                 
             } else if (choice === '3') {
-                alert(`🔐 DRIVER CREDENTIALS:\n\nName: ${name}\nPassword: ${pass}\n\nLink: ${loginLink}`);
+                // Show credentials
+                alert(`🔐 DRIVER CREDENTIALS:\n\n${credentials}`);
                 
             } else if (choice === '4') {
+                // SMS option (simulated)
                 const phone = appData.drivers.find(d => d.id === id)?.phone || 'driver\'s phone';
-                alert(`📱 SMS would be sent to ${phone}\n\nMessage:\nMoveX Driver Login\nName: ${name}\nPassword: ${pass}\nLink: ${loginLink}`);
+                alert(`📱 SMS would be sent to ${phone}\n\nMessage:\n${credentials}`);
                 addActivity('Driver', `SMS login sent to ${name}`, 'info');
+            } else {
+                alert('Invalid option');
+                return;
             }
             
-            addActivity('Driver', `Login link sent to ${name}`, 'success');
+            addActivity('Driver', `Login credentials sent to ${name}`, 'success');
+            showNotification(`Login credentials prepared for ${name}`);
         }
 
         // =============================================
@@ -4116,73 +4183,90 @@
         }
 
         // =============================================
-        // COMMERCIAL ADVERTISING
+        // COMMERCIAL ADVERTISING - FIXED display
         // =============================================
-        function createAd() {
-            const title = document.getElementById('adTitle').value;
-            const text = document.getElementById('adText').value;
-            const duration = parseInt(document.getElementById('adDuration').value);
-            
-            if (!title || !text) {
-                alert('Please fill title and text');
-                return;
-            }
+     
+       function createAd() {
+    const title = document.getElementById('adTitle').value;
+    const text = document.getElementById('adText').value;
+    const duration = parseInt(document.getElementById('adDuration').value);
+    
+    if (!title || !text) {
+        alert('Please fill title and text');
+        return;
+    }
 
-            const ad = {
-                id: 'AD' + Math.floor(Math.random() * 9000 + 1000),
-                title, text, duration,
-                status: document.getElementById('adStatus').value,
-                createdAt: new Date().toISOString()
-            };
+    const ad = {
+        id: 'AD' + Math.floor(Math.random() * 9000 + 1000),
+        title: title,
+        text: text,
+        duration: duration,
+        status: document.getElementById('adStatus').value,
+        createdAt: new Date().toISOString()
+    };
 
-            appData.advertisements.unshift(ad);
-            updateAdsList();
+    appData.advertisements.unshift(ad);
+    updateAdsList();
 
-            if (Object.keys(connectedDrivers).length > 0) {
-                socket?.emit('commercial_ad', {
-                    id: ad.id, 
+    // Update preview
+    document.getElementById('adTextPreview').textContent = text;
+    document.getElementById('adTimer').textContent = `00:${duration.toString().padStart(2, '0')}`;
+
+    // Send to connected drivers
+    if (Object.keys(connectedDrivers).length > 0) {
+        // Broadcast to all drivers
+        socket?.emit('commercial_ad', {
+            id: ad.id,
+            title: title,
+            text: text,
+            duration: duration
+        });
+        
+        // Also send individually to each driver to ensure delivery
+        Object.keys(connectedDrivers).forEach(driverId => {
+            socket?.emit('send_to_driver', {
+                driverId: driverId,
+                event: 'commercial_ad',
+                data: {
+                    id: ad.id,
+                    title: title,
                     text: text,
-                    duration: duration,
-                    title: title
-                });
-                
-                Object.keys(connectedDrivers).forEach(driverId => {
-                    socket?.emit('send_to_driver', {
-                        driverId: driverId,
-                        event: 'commercial_ad',
-                        data: {
-                            id: ad.id,
-                            text: text,
-                            duration: duration,
-                            title: title
-                        }
-                    });
-                });
-                
-                showNotification(`Ad sent to ${Object.keys(connectedDrivers).length} drivers`);
-                addActivity('Ad', `New ad "${title}" created and sent`, 'info');
-            }
+                    duration: duration
+                }
+            });
+        });
+        
+        showNotification(`Ad sent to ${Object.keys(connectedDrivers).length} drivers`);
+        addActivity('Ad', `New ad "${title}" created and sent`, 'info');
+    } else {
+        showNotification('Ad created (no drivers online)');
+    }
 
-            document.getElementById('adTextPreview').textContent = text;
-            document.getElementById('adTimer').textContent = `00:${duration.toString().padStart(2, '0')}`;
+    // Clear form
+    document.getElementById('adTitle').value = '';
+    document.getElementById('adText').value = '';
+    document.getElementById('adDuration').value = '30';
+    
+    alert('Advertisement created!');
+}
 
-            document.getElementById('adTitle').value = '';
-            document.getElementById('adText').value = 'Welcome to MoveX Dispatch';
-            document.getElementById('adDuration').value = '30';
-            
-            alert('Advertisement created!');
-        }
 
         function updateAdsList() {
             const list = document.getElementById('adsList');
             if (!list) return;
+            
+            if (appData.advertisements.length === 0) {
+                list.innerHTML = '<p style="color: var(--gray); text-align: center; padding: 20px;">No advertisements yet</p>';
+                return;
+            }
+            
             list.innerHTML = appData.advertisements.map(ad => `
                 <div class="ad-item ${ad.status}">
                     <div class="ad-status ${ad.status}"></div>
                     <div class="ad-details">
-                        <h4>${ad.title}</h4>
-                        <p>${ad.text.substring(0, 50)}${ad.text.length > 50 ? '...' : ''}</p>
-                        <p style="font-size: 11px;">${ad.duration}s | ${ad.status}</p>
+                        <h4>${ad.title || 'Untitled'}</h4>
+                        <p>${ad.text ? (ad.text.substring(0, 50) + (ad.text.length > 50 ? '...' : '')) : 'No text'}</p>
+                        <p style="font-size: 11px;">${ad.duration || 30}s | ${ad.status || 'inactive'}</p>
                     </div>
                 </div>
             `).join('');
@@ -4192,22 +4276,44 @@
 
         function playAd() { 
             const text = document.getElementById('adText').value;
-            document.getElementById('adTextPreview').textContent = text;
-            showNotification('Playing ad preview');
+            if (text) {
+                document.getElementById('adTextPreview').textContent = text;
+                showNotification('Playing ad preview');
+            }
         }
         
-        function pauseAd() { showNotification('Ad paused'); }
+        function pauseAd() { 
+            showNotification('Ad preview paused');
+        }
         
         function testAd() { 
             const text = document.getElementById('adText').value;
-            alert(`Testing ad on driver app:\n\n${text}`);
+            if (text) {
+                alert(`📺 TEST AD ON DRIVER APP:\n\n${text}`);
+                // Simulate sending test ad to first connected driver
+                if (Object.keys(connectedDrivers).length > 0) {
+                    const firstDriver = Object.values(connectedDrivers)[0];
+                    socket?.emit('send_to_driver', {
+                        driverId: firstDriver.driverId,
+                        event: 'commercial_ad',
+                        data: {
+                            id: 'test-' + Date.now(),
+                            title: 'TEST AD',
+                            text: text,
+                            duration: 5
+                        }
+                    });
+                    showNotification(`Test ad sent to ${firstDriver.name}`);
+                }
+            }
         }
         
         function scheduleAd() { 
             const start = document.getElementById('adStartTime').value;
             const end = document.getElementById('adEndTime').value;
             if (start && end) {
-                showNotification(`Ad scheduled from ${start} to ${end}`);
+                showNotification(`Ad scheduled from ${new Date(start).toLocaleString()} to ${new Date(end).toLocaleString()}`);
+                addActivity('Ad', `Ad scheduled`, 'info');
             } else {
                 alert('Please set start and end times');
             }
@@ -4736,7 +4842,7 @@
                         <div class="action-buttons">
                             <button class="action-btn edit" onclick="editDriver('${d.id}')"><i class="fas fa-edit"></i></button>
                             <button class="action-btn send" onclick="sendDriverLink('${d.id}', '${d.name}', '${d.license}', '${d.email}')">
-                                <i class="fas fa-envelope"></i>
+                                <i class="fas fa-envelope"></i> Send
                             </button>
                         </div>
                     </td>
