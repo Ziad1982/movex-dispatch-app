@@ -3220,6 +3220,12 @@
         let isLoggedIn = false;
         let tripsChart = null;
         let driverStatuses = {};
+        
+        // FIX 1: Active job queue for one-driver-at-a-time dispatch
+        let activeJobQueue = [];
+        let currentJobIndex = 0;
+        let jobTimer = null;
+        let jobTimeout = 30; // 30 seconds
 
         // Application Data
         const appData = {
@@ -3420,9 +3426,71 @@
                 addActivity('Job', `New job created: ${data.id}`, 'info');
             });
 
+            // FIX 3: Handle cancel request from driver
+            socket.on('cancel_request', (data) => {
+                console.log('🚫 Cancel request from driver:', data);
+                
+                // Show notification in dispatch
+                showNotification(`Driver ${data.driverName} requests trip cancellation`);
+                
+                // Add to panic alerts list
+                const list = document.getElementById('panicAlertsList');
+                if (list) {
+                    list.innerHTML = `
+                        <div class="activity-item" style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--warning); margin-bottom: 10px;">
+                            <div class="activity-icon" style="background: var(--warning);">
+                                <i class="fas fa-question"></i>
+                            </div>
+                            <div class="activity-details">
+                                <p><strong>CANCEL REQUEST from ${data.driverName}</strong></p>
+                                <p>Trip: ${data.tripId}</p>
+                                <p>Location: ${data.location ? JSON.stringify(data.location) : 'Unknown'}</p>
+                                <div style="margin-top: 5px;">
+                                    <button class="btn btn-success" style="padding: 3px 10px; font-size: 11px;" onclick="approveCancel('${data.tripId}', '${data.driverId}')">✓ Approve</button>
+                                    <button class="btn btn-danger" style="padding: 3px 10px; font-size: 11px;" onclick="rejectCancel('${data.tripId}', '${data.driverId}')">✗ Reject</button>
+                                </div>
+                                <span class="activity-time">${new Date().toLocaleTimeString()}</span>
+                            </div>
+                        </div>
+                    ` + (list.innerHTML || '');
+                }
+                
+                // Update the trip status in bookings
+                const booking = appData.bookings.find(b => b.id === data.tripId);
+                if (booking) {
+                    booking.callStatus = 'Cancel Requested';
+                    updateBookingsTable();
+                }
+                
+                addActivity('Cancel', `Cancel request from ${data.driverName} for trip ${data.tripId}`, 'warning');
+            });
+
+            // FIX 4: Handle driver messages
+            socket.on('driver_message', (data) => {
+                console.log('📨 Message from driver:', data);
+                
+                // Show notification
+                showNotification(`Message from ${data.driverName}`);
+                
+                // Add to recent activity
+                addActivity('Message', `${data.driverName}: ${data.text}`, 'info');
+                
+                // Could add to a message center here
+                if (data.text && data.driverName) {
+                    // You could display in a modal or message panel
+                    console.log(`Driver ${data.driverName} says: ${data.text}`);
+                }
+            });
+
             socket.on('job_accepted', (data) => {
                 console.log('✅ Job accepted:', data);
                 const driver = connectedDrivers[data.driverId];
+                
+                // FIX 9: Clear job queue when accepted
+                clearTimeout(jobTimer);
+                activeJobQueue = [];
+                currentJobIndex = 0;
+                
                 if (driver) {
                     driver.status = 'on_trip';
                     driverStatuses[data.driverId] = 'on_trip';
@@ -3517,6 +3585,20 @@
                 updateHistoryTable();
             });
 
+            socket.on('job_declined', (data) => {
+                console.log('❌ Job declined:', data);
+                
+                // FIX 8 & 10: Move to next driver in queue
+                moveToNextDriver(data.jobId, data.driverId);
+            });
+
+            socket.on('job_expired', (data) => {
+                console.log('⏱️ Job expired:', data);
+                
+                // FIX 8 & 10: Move to next driver in queue
+                moveToNextDriver(data.jobId, null);
+            });
+
             socket.on('panic_alert', (data) => {
                 console.log('🚨 PANIC:', data);
                 const driverId = data.driverId;
@@ -3548,6 +3630,110 @@
         }
 
         // =============================================
+        // FIX 8 & 10: Move to next driver in queue
+        // =============================================
+        function moveToNextDriver(jobId, declinedDriverId) {
+            if (activeJobQueue.length === 0) return;
+            
+            // Find current job in queue
+            const jobIndex = activeJobQueue.findIndex(j => j.jobId === jobId);
+            if (jobIndex === -1) return;
+            
+            const job = activeJobQueue[jobIndex];
+            
+            // Remove declined driver from queue if exists
+            if (declinedDriverId) {
+                job.driverQueue = job.driverQueue.filter(d => d.driverId !== declinedDriverId);
+            }
+            
+            // Check if there are more drivers to try
+            if (job.driverQueue.length > 0) {
+                // Send to next driver
+                const nextDriver = job.driverQueue[0];
+                
+                socket.emit('send_to_driver', {
+                    driverId: nextDriver.driverId,
+                    event: 'new_job',
+                    data: {
+                        id: job.jobId,
+                        customer: job.customer,
+                        phone: job.phone,
+                        pickup: job.pickup,
+                        destination: job.destination,
+                        distance: nextDriver.distance.toFixed(1),
+                        fare: job.fare,
+                        pickupLat: job.pickupLat,
+                        pickupLng: job.pickupLng
+                    }
+                });
+                
+                // Update job in queue with remaining drivers
+                job.driverQueue = job.driverQueue.slice(1);
+                
+                // Start timer for this driver
+                clearTimeout(jobTimer);
+                jobTimer = setTimeout(() => {
+                    moveToNextDriver(jobId, nextDriver.driverId);
+                }, jobTimeout * 1000);
+                
+                addActivity('Dispatch', `Job ${jobId} sent to next driver (${nextDriver.name})`, 'info');
+            } else {
+                // No more drivers, job expired
+                activeJobQueue = activeJobQueue.filter(j => j.jobId !== jobId);
+                addActivity('Dispatch', `Job ${jobId} expired - no drivers available`, 'warning');
+                showNotification(`Job ${jobId} expired - no drivers accepted`);
+            }
+        }
+
+        // =============================================
+        // FIX 3: Approve/Reject cancel requests
+        // =============================================
+        function approveCancel(tripId, driverId) {
+            if (socket && socket.connected) {
+                socket.emit('cancel_approved', {
+                    tripId: tripId,
+                    driverId: driverId
+                });
+                
+                // Update booking status
+                const booking = appData.bookings.find(b => b.id === tripId);
+                if (booking) {
+                    booking.callStatus = 'Cancelled';
+                }
+                
+                // Update trip history
+                const trip = appData.tripHistory.find(t => t.id === tripId);
+                if (trip) {
+                    trip.callStatus = 'Canceled';
+                }
+                
+                updateBookingsTable();
+                updateHistoryTable();
+                
+                showNotification(`Cancel request approved for trip ${tripId}`);
+                addActivity('Cancel', `Cancel approved for trip ${tripId}`, 'success');
+                
+                // Remove from panic list
+                document.getElementById('panicAlertsList').innerHTML = '';
+            }
+        }
+
+        function rejectCancel(tripId, driverId) {
+            if (socket && socket.connected) {
+                socket.emit('cancel_rejected', {
+                    tripId: tripId,
+                    driverId: driverId
+                });
+                
+                showNotification(`Cancel request rejected for trip ${tripId}`);
+                addActivity('Cancel', `Cancel rejected for trip ${tripId}`, 'info');
+                
+                // Remove from panic list
+                document.getElementById('panicAlertsList').innerHTML = '';
+            }
+        }
+
+        // =============================================
         // SMART DISPATCH ALGORITHM - UPDATED with accurate distance calculation
         // =============================================
         function findBestDriver(pickupLat, pickupLng) {
@@ -3571,36 +3757,7 @@
             
             driversWithDistance.sort((a, b) => a.distance - b.distance);
             
-            const closestDistance = driversWithDistance[0].distance;
-            const closestDrivers = driversWithDistance.filter(d => 
-                Math.abs(d.distance - closestDistance) < 0.1
-            );
-            
-            let selectedDriver;
-            let selectionMethod;
-            
-            if (closestDrivers.length > 1) {
-                const lastSelected = localStorage.getItem('lastSelectedDriver');
-                const available = closestDrivers.filter(d => d.driverId !== lastSelected);
-                selectedDriver = available.length > 0 ? available[0] : closestDrivers[0];
-                selectionMethod = 'Round Robin (Same Distance)';
-            } else {
-                selectedDriver = driversWithDistance[0];
-                selectionMethod = 'Closest Distance';
-            }
-            
-            localStorage.setItem('lastSelectedDriver', selectedDriver.driverId);
-            
-            return {
-                driver: selectedDriver,
-                distance: selectedDriver.distance,
-                method: selectionMethod,
-                allDistances: driversWithDistance.map(d => ({
-                    driverId: d.driverId,
-                    name: d.name,
-                    distance: d.distance
-                }))
-            };
+            return driversWithDistance;
         }
 
         // =============================================
@@ -3844,55 +4001,151 @@
         }
 
         // =============================================
-        // SEND JOB TO DRIVERS - FIXED to send to both events
+        // FIX 7,8,9,10: SEND JOB TO DRIVERS - One driver at a time with queue
         // =============================================
         function sendJobToDrivers(jobData) {
             console.log('🚀 SENDING JOB TO DRIVERS:', jobData);
             
-            const driverCount = Object.keys(connectedDrivers).length;
+            // Get all available drivers sorted by distance
+            const driversWithDistance = findBestDriver(jobData.pickupLat || 36.1627, jobData.pickupLng || -86.7816);
             
-            if (driverCount === 0) {
+            if (!driversWithDistance || driversWithDistance.length === 0) {
                 alert('No drivers online to send job to');
                 return false;
             }
             
             if (socket && socket.connected) {
-                // Send to both event names for compatibility
-                socket.emit('new_job_from_dispatch', {
-                    id: jobData.id,
+                // FIX 8 & 10: Create queue of drivers to try
+                const driverQueue = driversWithDistance.map(d => ({
+                    driverId: d.driverId,
+                    name: d.name,
+                    distance: d.distance
+                }));
+                
+                // FIX 9: Only send to first driver initially
+                const firstDriver = driverQueue[0];
+                
+                // Send to first driver with distance
+                socket.emit('send_to_driver', {
+                    driverId: firstDriver.driverId,
+                    event: 'new_job',
+                    data: {
+                        id: jobData.id,
+                        customer: jobData.customer,
+                        phone: jobData.phone || '',
+                        pickup: jobData.pickup,
+                        destination: jobData.destination,
+                        distance: firstDriver.distance.toFixed(1),
+                        fare: jobData.fare,
+                        eta: jobData.eta || '10-15 min',
+                        scheduledTime: jobData.scheduledTime || null,
+                        pickupLat: jobData.pickupLat || 36.1627,
+                        pickupLng: jobData.pickupLng || -86.7816
+                    }
+                });
+                
+                // Add to active job queue with remaining drivers
+                activeJobQueue.push({
+                    jobId: jobData.id,
                     customer: jobData.customer,
                     phone: jobData.phone || '',
                     pickup: jobData.pickup,
                     destination: jobData.destination,
-                    distance: jobData.distance || (Math.random() * 5 + 1).toFixed(1),
                     fare: jobData.fare,
-                    eta: jobData.eta || '10-15 min',
-                    scheduledTime: jobData.scheduledTime || null,
                     pickupLat: jobData.pickupLat || 36.1627,
-                    pickupLng: jobData.pickupLng || -86.7816
+                    pickupLng: jobData.pickupLng || -86.7816,
+                    driverQueue: driverQueue.slice(1) // Remaining drivers
                 });
                 
-                // Also emit to 'new_job' for driver apps that listen to that
-                socket.emit('new_job', {
-                    id: jobData.id,
-                    customer: jobData.customer,
-                    phone: jobData.phone || '',
-                    pickup: jobData.pickup,
-                    destination: jobData.destination,
-                    distance: jobData.distance || (Math.random() * 5 + 1).toFixed(1),
-                    fare: jobData.fare,
-                    eta: jobData.eta || '10-15 min',
-                    scheduledTime: jobData.scheduledTime || null,
-                    pickupLat: jobData.pickupLat || 36.1627,
-                    pickupLng: jobData.pickupLng || -86.7816
-                });
+                // Start timer for first driver (30 seconds)
+                clearTimeout(jobTimer);
+                jobTimer = setTimeout(() => {
+                    moveToNextDriver(jobData.id, firstDriver.driverId);
+                }, jobTimeout * 1000);
                 
-                console.log('✅ Job sent via new_job_from_dispatch and new_job');
-                alert(`✅ Job sent to ${driverCount} drivers!`);
+                console.log('✅ Job sent to first driver:', firstDriver.name, 'distance:', firstDriver.distance.toFixed(1), 'miles');
+                alert(`✅ Job sent to ${firstDriver.name} (${firstDriver.distance.toFixed(1)} miles away)`);
                 return true;
             } else {
                 alert('❌ Not connected to server');
                 return false;
+            }
+        }
+
+        // =============================================
+        // FIX 7: REDISPATCH - Send to next driver in queue
+        // =============================================
+        function redispatchBooking(id) {
+            const booking = appData.bookings.find(b => b.id === id);
+            if (booking) {
+                // Get pickup coordinates (in real app, these would come from geocoding)
+                const pickupLat = 36.1627 + (Math.random() - 0.5) * 0.1;
+                const pickupLng = -86.7816 + (Math.random() - 0.5) * 0.1;
+                
+                // Get sorted drivers
+                const driversWithDistance = findBestDriver(pickupLat, pickupLng);
+                
+                if (!driversWithDistance || driversWithDistance.length === 0) {
+                    alert('No drivers available');
+                    return;
+                }
+                
+                // Create queue
+                const driverQueue = driversWithDistance.map(d => ({
+                    driverId: d.driverId,
+                    name: d.name,
+                    distance: d.distance
+                }));
+                
+                // Send to first driver
+                const firstDriver = driverQueue[0];
+                
+                socket?.emit('send_to_driver', {
+                    driverId: firstDriver.driverId,
+                    event: 'new_job',
+                    data: {
+                        id: booking.id,
+                        customer: booking.customer,
+                        phone: booking.phone || '',
+                        pickup: booking.pickup,
+                        destination: booking.destination,
+                        distance: firstDriver.distance.toFixed(1),
+                        fare: booking.fare,
+                        selectionMethod: 'Redispatched',
+                        pickupLat: pickupLat,
+                        pickupLng: pickupLng
+                    }
+                });
+                
+                // Update booking
+                booking.driver = firstDriver.name;
+                booking.driverId = firstDriver.driverId;
+                booking.selectionMethod = 'Redispatched';
+                booking.callStatus = 'Dispatched';
+                
+                // Add to queue
+                activeJobQueue.push({
+                    jobId: booking.id,
+                    customer: booking.customer,
+                    phone: booking.phone || '',
+                    pickup: booking.pickup,
+                    destination: booking.destination,
+                    fare: booking.fare,
+                    pickupLat: pickupLat,
+                    pickupLng: pickupLng,
+                    driverQueue: driverQueue.slice(1)
+                });
+                
+                // Start timer
+                clearTimeout(jobTimer);
+                jobTimer = setTimeout(() => {
+                    moveToNextDriver(booking.id, firstDriver.driverId);
+                }, jobTimeout * 1000);
+                
+                updateBookingsTable();
+                
+                addActivity('Dispatch', `Booking ${id} redispatched to ${firstDriver.name} (${firstDriver.distance.toFixed(1)} mi)`, 'info');
+                showNotification(`Booking ${id} redispatched to ${firstDriver.name}`);
             }
         }
 
@@ -3969,6 +4222,7 @@
                 destLng: destLng
             };
             
+            // FIX 7,8,9,10: Send job using new queue system
             sendJobToDrivers(jobData);
             
             const newBooking = {
@@ -4002,7 +4256,7 @@
             
             const driverCount = Object.keys(connectedDrivers).length;
             if (driverCount > 0 && !scheduledTime) {
-                alert(`Booking created! Sent to ${driverCount} drivers. Distance: ${distanceInMiles} miles, Est. Fare: $${fare.toFixed(2)}`);
+                alert(`Booking created! Sent to nearest driver. Distance: ${distanceInMiles} miles, Est. Fare: $${fare.toFixed(2)}`);
             } else if (scheduledTime) {
                 alert(`Booking scheduled for ${new Date(scheduledTime).toLocaleString()}`);
             } else {
@@ -4828,7 +5082,7 @@
                     <td>${b.id}</td>
                     <td>${b.date}</td>
                     <td>${b.scheduledTime}</td>
-                    <td><span class="status-badge status-${b.callStatus.toLowerCase()}">${b.callStatus}</span></td>
+                    <td><span class="status-badge status-${b.callStatus.toLowerCase().replace(' ', '-')}">${b.callStatus}</span></td>
                     <td>${b.customer}</td>
                     <td>${b.phone || 'N/A'}</td>
                     <td>${b.pickup}</td>
@@ -5095,44 +5349,6 @@
                 updateDashboardStats();
                 addActivity('Booking', `Booking ${id} deleted`, 'warning');
                 showNotification('Booking deleted');
-            }
-        }
-        
-        function redispatchBooking(id) {
-            const booking = appData.bookings.find(b => b.id === id);
-            if (booking) {
-                const pickupLat = 36.1627 + (Math.random() - 0.5) * 0.1;
-                const pickupLng = -86.7816 + (Math.random() - 0.5) * 0.1;
-                const best = findBestDriver(pickupLat, pickupLng);
-                
-                if (best) {
-                    socket?.emit('send_to_driver', {
-                        driverId: best.driver.driverId,
-                        event: 'new_job',
-                        data: {
-                            id: booking.id + '-R',
-                            customer: booking.customer,
-                            pickup: booking.pickup,
-                            destination: booking.destination,
-                            distance: best.distance.toFixed(1),
-                            fare: booking.fare,
-                            selectionMethod: best.method,
-                            pickupLat: pickupLat,
-                            pickupLng: pickupLng
-                        }
-                    });
-                    
-                    booking.driver = best.driver.name;
-                    booking.driverId = best.driver.driverId;
-                    booking.selectionMethod = best.method;
-                    booking.callStatus = 'Dispatched';
-                    updateBookingsTable();
-                    
-                    addActivity('Dispatch', `Booking ${id} redispatched to ${best.driver.name} (${best.distance.toFixed(1)} mi)`, 'info');
-                    showNotification(`Booking ${id} redispatched to ${best.driver.name}`);
-                } else {
-                    alert('No drivers available');
-                }
             }
         }
         
@@ -5530,7 +5746,7 @@
             document.getElementById('driverCount').textContent = count;
         }
 
-        // Make all functions global
+        // Make all functions global (including new ones)
         window.showBookingModal = showBookingModal;
         window.hideBookingModal = hideBookingModal;
         window.saveBooking = saveBooking;
@@ -5588,6 +5804,8 @@
         window.showInviteDispatcherModal = showInviteDispatcherModal;
         window.hideDispatcherModal = hideDispatcherModal;
         window.sendDispatcherInvite = sendDispatcherInvite;
+        window.approveCancel = approveCancel;
+        window.rejectCancel = rejectCancel;
     </script>
 </body>
 </html>
