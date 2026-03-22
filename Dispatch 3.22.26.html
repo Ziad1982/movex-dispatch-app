@@ -2196,7 +2196,7 @@
                                 <th>Start Time</th>
                                 <th>ETA</th>
                                 <th>Actions</th>
-                              </tr>
+                            </tr>
                         </thead>
                         <tbody id="activeTripsTable"></tbody>
                     </table>
@@ -2212,7 +2212,7 @@
                     </div>
                     <table class="data-table">
                         <thead>
-                              <tr>
+                            <tr>
                                 <th>Driver ID</th>
                                 <th>Name</th>
                                 <th>Cab</th>
@@ -2222,7 +2222,7 @@
                                 <th>Status</th>
                                 <th>Rating</th>
                                 <th>Actions</th>
-                              </tr>
+                            </tr>
                         </thead>
                         <tbody id="availableDriversTable"></tbody>
                     </table>
@@ -2238,7 +2238,7 @@
                     </div>
                     <table class="data-table">
                         <thead>
-                               <tr>
+                             <tr>
                                 <th>Booking ID</th>
                                 <th>Time</th>
                                 <th>Customer</th>
@@ -2247,7 +2247,7 @@
                                 <th>Status</th>
                                 <th>Fare</th>
                                 <th>Actions</th>
-                               </tr>
+                             </tr>
                         </thead>
                         <tbody id="todayBookingsTable"></tbody>
                     </table>
@@ -2302,7 +2302,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                               <tr>
+                             <tr>
                                 <th>Booking ID</th>
                                 <th>Date/Time</th>
                                 <th>Scheduled Time</th>
@@ -2314,10 +2314,10 @@
                                 <th>Driver</th>
                                 <th>Fare</th>
                                 <th>Actions</th>
-                               </tr>
+                             </tr>
                         </thead>
                         <tbody id="bookingsTableBody"></tbody>
-                     </table>
+                    </table>
                 </div>
             </div>
             
@@ -2342,7 +2342,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                               <tr>
+                             <tr>
                                 <th>Driver ID</th>
                                 <th>Cab No.</th>
                                 <th>Driver Name</th>
@@ -2352,10 +2352,10 @@
                                 <th>Status</th>
                                 <th>Rating</th>
                                 <th>Actions</th>
-                               </tr>
+                             </tr>
                         </thead>
                         <tbody id="driversTableBody"></tbody>
-                     </table>
+                    </table>
                 </div>
             </div>
             
@@ -2377,7 +2377,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                               <tr>
+                             <tr>
                                 <th>Vehicle ID</th>
                                 <th>Plate</th>
                                 <th>Make/Model</th>
@@ -2387,10 +2387,10 @@
                                 <th>Status</th>
                                 <th>Driver</th>
                                 <th>Actions</th>
-                               </tr>
+                             </tr>
                         </thead>
                         <tbody id="vehiclesTableBody"></tbody>
-                     </table>
+                    </table>
                 </div>
             </div>
             
@@ -2438,7 +2438,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                               <tr>
+                             <tr>
                                 <th>ID</th>
                                 <th>Date/Time</th>
                                 <th>Customer</th>
@@ -2451,10 +2451,10 @@
                                 <th>Duration</th>
                                 <th>Selection Method</th>
                                 <th>Actions</th>
-                               </tr>
+                             </tr>
                         </thead>
                         <tbody id="historyTableBody"></tbody>
-                     </table>
+                    </table>
                 </div>
             </div>
             
@@ -2588,7 +2588,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                               <tr>
+                             <tr>
                                 <th>Admin ID</th>
                                 <th>Username</th>
                                 <th>Full Name</th>
@@ -2596,10 +2596,10 @@
                                 <th>Access Level</th>
                                 <th>Status</th>
                                 <th>Actions</th>
-                               </tr>
+                             </tr>
                         </thead>
                         <tbody id="adminsTableBody"></tbody>
-                     </table>
+                    </table>
                 </div>
             </div>
             
@@ -4804,17 +4804,17 @@
                                 </thead>
                                 <tbody>
                                     ${results.filtered.slice(0, 50).map(t => `
-                                         <tr>
+                                        <tr>
                                             <td>${t.id}</td>
                                             <td>${t.date}</td>
                                             <td>${t.customer}</td>
                                             <td>${t.driver}</td>
                                             <td>$${t.fare}</td>
                                             <td>${t.callStatus}</td>
-                                         </tr>
+                                        </tr>
                                     `).join('')}
                                 </tbody>
-                             </table>
+                            </table>
                         </body>
                     </html>
                 `);
@@ -4919,30 +4919,30 @@
                         <body>
                             <h1>MoveX Trip History</h1>
                             <p>Generated: ${new Date().toLocaleString()}</p>
-                             <table>
+                            <table>
                                 <thead>
-                                     <tr>
+                                    <tr>
                                         <th>ID</th>
                                         <th>Date</th>
                                         <th>Customer</th>
                                         <th>Driver</th>
                                         <th>Fare</th>
                                         <th>Status</th>
-                                     </tr>
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     ${filtered.slice(0, 100).map(t => `
-                                         <tr>
+                                        <tr>
                                             <td>${t.id}</td>
                                             <td>${t.date}</td>
                                             <td>${t.customer}</td>
                                             <td>${t.driver}</td>
                                             <td>$${t.fare}</td>
                                             <td>${t.callStatus}</td>
-                                         </tr>
+                                        </tr>
                                     `).join('')}
                                 </tbody>
-                             </table>
+                            </table>
                         </body>
                     </html>
                 `);
@@ -5746,15 +5746,6 @@
             document.getElementById('driverCount').textContent = count;
         }
 
-        function updateBookingStatus(bookingId, status, driverName) {
-            const booking = appData.bookings.find(b => b.id === bookingId);
-            if (booking) {
-                booking.callStatus = status;
-                booking.driver = driverName || booking.driver;
-                updateBookingsTable();
-            }
-        }
-
         // Make all functions global (including new ones)
         window.showBookingModal = showBookingModal;
         window.hideBookingModal = hideBookingModal;
@@ -5815,7 +5806,6 @@
         window.sendDispatcherInvite = sendDispatcherInvite;
         window.approveCancel = approveCancel;
         window.rejectCancel = rejectCancel;
-        window.moveToNextDriver = moveToNextDriver;
     </script>
 </body>
 </html>
