@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,7 +12,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        /* Keep all your existing CSS exactly as you have it */
+        /* ALL YOUR EXISTING CSS STYLES - KEEP THEM EXACTLY AS THEY ARE */
         * {
             margin: 0;
             padding: 0;
@@ -2213,7 +2212,7 @@
                     </div>
                     <table class="data-table">
                         <thead>
-                            <tr>
+                             early
                                 <th>Driver ID</th>
                                 <th>Name</th>
                                 <th>Cab</th>
@@ -2239,7 +2238,7 @@
                     </div>
                     <table class="data-table">
                         <thead>
-                            <tr>
+                             <tr>
                                 <th>Booking ID</th>
                                 <th>Time</th>
                                 <th>Customer</th>
@@ -2248,7 +2247,7 @@
                                 <th>Status</th>
                                 <th>Fare</th>
                                 <th>Actions</th>
-                            </tr>
+                             </tr>
                         </thead>
                         <tbody id="todayBookingsTable"></tbody>
                     </table>
@@ -2303,7 +2302,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                            <tr>
+                             <tr>
                                 <th>Booking ID</th>
                                 <th>Date/Time</th>
                                 <th>Scheduled Time</th>
@@ -2315,7 +2314,7 @@
                                 <th>Driver</th>
                                 <th>Fare</th>
                                 <th>Actions</th>
-                            </tr>
+                             </tr>
                         </thead>
                         <tbody id="bookingsTableBody"></tbody>
                     </table>
@@ -2343,7 +2342,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                            <tr>
+                             <tr>
                                 <th>Driver ID</th>
                                 <th>Cab No.</th>
                                 <th>Driver Name</th>
@@ -2353,7 +2352,7 @@
                                 <th>Status</th>
                                 <th>Rating</th>
                                 <th>Actions</th>
-                            </tr>
+                             </tr>
                         </thead>
                         <tbody id="driversTableBody"></tbody>
                     </table>
@@ -2378,7 +2377,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                            <tr>
+                             <tr>
                                 <th>Vehicle ID</th>
                                 <th>Plate</th>
                                 <th>Make/Model</th>
@@ -2388,7 +2387,7 @@
                                 <th>Status</th>
                                 <th>Driver</th>
                                 <th>Actions</th>
-                            </tr>
+                             </tr>
                         </thead>
                         <tbody id="vehiclesTableBody"></tbody>
                     </table>
@@ -2439,7 +2438,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                            <tr>
+                             <tr>
                                 <th>ID</th>
                                 <th>Date/Time</th>
                                 <th>Customer</th>
@@ -2452,7 +2451,7 @@
                                 <th>Duration</th>
                                 <th>Selection Method</th>
                                 <th>Actions</th>
-                            </tr>
+                             </tr>
                         </thead>
                         <tbody id="historyTableBody"></tbody>
                     </table>
@@ -2589,7 +2588,7 @@
                 <div class="data-table-container">
                     <table class="data-table">
                         <thead>
-                            <tr>
+                             <tr>
                                 <th>Admin ID</th>
                                 <th>Username</th>
                                 <th>Full Name</th>
@@ -2597,7 +2596,7 @@
                                 <th>Access Level</th>
                                 <th>Status</th>
                                 <th>Actions</th>
-                            </tr>
+                             </tr>
                         </thead>
                         <tbody id="adminsTableBody"></tbody>
                     </table>
@@ -4002,10 +4001,10 @@
         }
 
         // =============================================
-        // FIX 7,8,9,10: SEND JOB TO DRIVERS - One driver at a time with queue
+        // FIX 7,8,9,10: SEND JOB TO DRIVERS - FIXED TO SEND ALL DATA
         // =============================================
         function sendJobToDrivers(jobData) {
-            console.log('🚀 SENDING JOB TO DRIVERS:', jobData);
+            console.log('🚀 SENDING JOB TO DRIVERS with FULL DATA:', jobData);
             
             // Get all available drivers sorted by distance
             const driversWithDistance = findBestDriver(jobData.pickupLat || 36.1627, jobData.pickupLng || -86.7816);
@@ -4016,33 +4015,41 @@
             }
             
             if (socket && socket.connected) {
-                // FIX 8 & 10: Create queue of drivers to try
+                // Create queue of drivers to try
                 const driverQueue = driversWithDistance.map(d => ({
                     driverId: d.driverId,
                     name: d.name,
                     distance: d.distance
                 }));
                 
-                // FIX 9: Only send to first driver initially
                 const firstDriver = driverQueue[0];
                 
-                // Send to first driver with distance
+                // ========== SEND COMPLETE JOB DATA WITH ALL FIELDS ==========
+                const jobDataToSend = {
+                    id: jobData.id,
+                    customer: jobData.customer,
+                    phone: jobData.phone || '',
+                    pickup: jobData.pickup,
+                    destination: jobData.destination,
+                    distance: firstDriver.distance.toFixed(1),
+                    fare: jobData.fare,
+                    eta: jobData.eta || '10-15 min',
+                    scheduledTime: jobData.scheduledTime || null,
+                    pickupLat: jobData.pickupLat || 36.1627,
+                    pickupLng: jobData.pickupLng || -86.7816,
+                    destLat: jobData.destLat || 36.1627,
+                    destLng: jobData.destLng || -86.7816,
+                    accountType: jobData.accountType || 'Standard',
+                    notes: jobData.notes || '',
+                    callStatus: jobData.callStatus || 'New'
+                };
+                
+                console.log('📦 Sending to driver:', jobDataToSend);
+                
                 socket.emit('send_to_driver', {
                     driverId: firstDriver.driverId,
                     event: 'new_job',
-                    data: {
-                        id: jobData.id,
-                        customer: jobData.customer,
-                        phone: jobData.phone || '',
-                        pickup: jobData.pickup,
-                        destination: jobData.destination,
-                        distance: firstDriver.distance.toFixed(1),
-                        fare: jobData.fare,
-                        eta: jobData.eta || '10-15 min',
-                        scheduledTime: jobData.scheduledTime || null,
-                        pickupLat: jobData.pickupLat || 36.1627,
-                        pickupLng: jobData.pickupLng || -86.7816
-                    }
+                    data: jobDataToSend
                 });
                 
                 // Add to active job queue with remaining drivers
@@ -4055,7 +4062,10 @@
                     fare: jobData.fare,
                     pickupLat: jobData.pickupLat || 36.1627,
                     pickupLng: jobData.pickupLng || -86.7816,
-                    driverQueue: driverQueue.slice(1) // Remaining drivers
+                    accountType: jobData.accountType || 'Standard',
+                    notes: jobData.notes || '',
+                    scheduledTime: jobData.scheduledTime || null,
+                    driverQueue: driverQueue.slice(1)
                 });
                 
                 // Start timer for first driver (30 seconds)
@@ -4792,30 +4802,30 @@
                                 <div class="stat"><h3>Total Revenue</h3><p>$${results.totalRevenue.toFixed(2)}</p></div>
                                 <div class="stat"><h3>Average Fare</h3><p>$${results.avgFare}</p></div>
                             </div>
-                            <table>
+                             <table>
                                 <thead>
-                                    <tr>
+                                     <tr>
                                         <th>ID</th>
                                         <th>Date</th>
                                         <th>Customer</th>
                                         <th>Driver</th>
                                         <th>Fare</th>
                                         <th>Status</th>
-                                    </tr>
+                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${results.filtered.slice(0, 50).map(t => `
-                                        <tr>
+                                         <tr>
                                             <td>${t.id}</td>
                                             <td>${t.date}</td>
                                             <td>${t.customer}</td>
                                             <td>${t.driver}</td>
                                             <td>$${t.fare}</td>
                                             <td>${t.callStatus}</td>
-                                        </tr>
+                                         </tr>
                                     `).join('')}
                                 </tbody>
-                            </table>
+                             </table>
                         </body>
                     </html>
                 `);
@@ -4922,25 +4932,25 @@
                             <p>Generated: ${new Date().toLocaleString()}</p>
                             <table>
                                 <thead>
-                                    <tr>
+                                     <tr>
                                         <th>ID</th>
                                         <th>Date</th>
                                         <th>Customer</th>
                                         <th>Driver</th>
                                         <th>Fare</th>
                                         <th>Status</th>
-                                    </tr>
+                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${filtered.slice(0, 100).map(t => `
-                                        <tr>
+                                         <tr>
                                             <td>${t.id}</td>
                                             <td>${t.date}</td>
                                             <td>${t.customer}</td>
                                             <td>${t.driver}</td>
                                             <td>$${t.fare}</td>
                                             <td>${t.callStatus}</td>
-                                        </tr>
+                                         </tr>
                                     `).join('')}
                                 </tbody>
                             </table>
@@ -5219,7 +5229,6 @@
                 const status = isOnline ? (d.status || 'online') : 'offline';
                 const statusColor = isOnline ? getStatusColor(status) : '#64748b';
                 
-                // Format location more clearly
                 let locationDisplay = 'Unknown';
                 if (d.location) {
                     locationDisplay = `${d.location.lat.toFixed(4)}° N, ${d.location.lng.toFixed(4)}° W`;
